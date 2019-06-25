@@ -11,116 +11,152 @@ from heapq import *
 # horizontal/vertical: 1
 # diagonal: sqrt(2)
 
-class Node():
+N = 20
+
+
+class Node:
     def __init__(self, parent=None, position=None):
         self.parent = parent
         self.position = position
 
+        self.f = 0
         self.g = 0
         self.h = 0
-        self.f = 0
 
-    def __eq__(self, other):
-        return self.position == other.position
-
-
-# h(n)
-def getDistance(a, b):
-    return (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2
+    def __lt__(self, other):
+        if self.f < other.f:
+            return self
+        else:
+            return other
 
 
+# H(n)
+def getDistanceToGoal(node, goal):
+    return (goal[0] - node[0]) ** 2 + (goal[1] - node[1]) ** 2
 
 
-def astar(maze, start, end):
-    """Returns a list of tuples as a path from the given start to the given end in the given maze"""
+def getPath(endNode):
+    path = []
+    currentNode = endNode
 
-    # Create start and end node
-    start_node = Node(None, start)
-    start_node.g = start_node.h = start_node.f = 0
-    end_node = Node(None, end)
-    end_node.g = end_node.h = end_node.f = 0
+    # reconstruct the path from goal to start
+    while currentNode is not None:
+        path.append(currentNode.position)
+        currentNode = currentNode.parent
 
-    # Initialize both open and closed list
-    open_list = []
-    closed_list = []
+    return path[::-1]
 
-    # Add the start node
-    open_list.append(start_node)
 
-    # Loop until you find the end
-    while len(open_list) > 0:
+def generateChildrenForNode(currentNode, maze):
+    children = []
 
-        # Get the current node
-        current_node = open_list[0]
-        current_index = 0
-        for index, item in enumerate(open_list):
-            if item.f < current_node.f:
-                current_node = item
-                current_index = index
+    for possiblePosition in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
 
-        # Pop current off open list, add to closed list
-        open_list.pop(current_index)
-        closed_list.append(current_node)
+        position = (currentNode.position[0] + possiblePosition[0], currentNode.position[1] + possiblePosition[1])
 
-        # Found the goal
-        if current_node == end_node:
-            path = []
-            current = current_node
-            while current is not None:
-                path.append(current.position)
-                current = current.parent
-            return path[::-1] # Return reversed path
+        # Out of bounds?
+        if position[0] < 0 or position[0] > (N - 1) or \
+                position[1] < 0 or position[1] > (N - 1):
+            continue
 
-        # Generate children
-        children = []
-        for new_position in [(0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)]: # Adjacent squares
+        # Check for walls
+        if maze[position[1]][position[0]] != 0:
+            continue
 
-            # Get node position
-            node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1])
+        children.append(Node(currentNode, position))
 
-            # Make sure within range
-            if node_position[0] > (len(maze) - 1) or node_position[0] < 0 or node_position[1] > (len(maze[len(maze)-1]) -1) or node_position[1] < 0:
-                continue
+    return children
 
-            # Make sure walkable terrain
-            if maze[node_position[0]][node_position[1]] != 0:
-                continue
 
-            # Create new node
-            new_node = Node(current_node, node_position)
+def calculatePath(maze, startPosition, goalPosition):
 
-            # Append
-            children.append(new_node)
+    # Initialisation
+    nodeStart = Node(None, startPosition)
+    nodeEnd = Node(None, goalPosition)
 
-        # Loop through children
+    openNodes = [nodeStart]
+    closedNodes = []
+
+    while len(openNodes) > 0:
+
+        currentNode = openNodes[0]
+        currentNodeIndex = 0
+
+        # get open node with lowest costs
+        for index, item in enumerate(openNodes):
+            if item.f < currentNode.f:
+                currentNode = item
+                currentNodeIndex = index
+
+        openNodes.pop(currentNodeIndex)
+        closedNodes.append(currentNode)
+
+        # goal reached?
+        if currentNode.position == nodeEnd.position:
+            return getPath(currentNode), currentNode.f
+
+        children = generateChildrenForNode(currentNode, maze)
+
         for child in children:
 
-            # Child is on the closed list
-            for closed_child in closed_list:
-                if child == closed_child:
-                    continue
+            skip = False
 
-            # Create the f, g, and h values
-            child.g = current_node.g + 1
-            child.h = ((child.position[0] - end_node.position[0]) ** 2) + ((child.position[1] - end_node.position[1]) ** 2)
+            # Skip children which are already on the closed list
+            for node in closedNodes:
+                if child.position == node.position:
+                    skip = True
+                    break
+
+            if skip:
+                continue
+
+            costs = 1
+
+            if isDiagonalChild(currentNode.position, child.position):
+                costs = np.sqrt(2)
+
+            child.g = currentNode.g + costs
+            child.h = getDistanceToGoal(child.position, nodeEnd.position)
             child.f = child.g + child.h
 
-            # Child is already in the open list
-            for open_node in open_list:
-                if child == open_node and child.g > open_node.g:
-                    continue
+            skip = False
 
-            # Add the child to the open list
-            open_list.append(child)
+            # Skip children which are already on the open list
+            for node in openNodes:
+                if child.position == node.position and child.g > node.g:
+                    skip = True
+                    break
+
+            if skip:
+                continue
+
+            openNodes.append(child)
 
 
+    return -1, -1
+
+def isDiagonalChild(parentPos, childPos):
+
+    # top-left
+    if (parentPos[0] - 1 == childPos[0] and parentPos[1] - 1 == childPos[1]):
+        return True
+
+    # top-right
+    if (parentPos[0] - 1 == childPos[0] and parentPos[1] + 1 == childPos[1]):
+        return True
+
+    # bottom-right
+    if (parentPos[0] + 1 == childPos[0] and parentPos[1] + 1 == childPos[1]):
+        return True
+
+    # bottom-left
+    if (parentPos[0] + 1 == childPos[0] and parentPos[1] - 1 == childPos[1]):
+        return True
+
+    return False
 
 
-map = []
-N = 20
-
-def plotData(path):
-    global map
+def plotData(board, path):
 
     fig = plt.figure(dpi=500)
     # fig.tight_layout()
@@ -133,7 +169,7 @@ def plotData(path):
 
     ax = fig.add_subplot(gs[0])
 
-    ax.matshow(map, vmin=0, vmax=1, cmap='Greys')
+    ax.matshow(board, vmin=0, vmax=1, cmap='Greys')
 
     plt.title('Map', x=0.5, y=1.2)
 
@@ -141,8 +177,8 @@ def plotData(path):
 
     plt.grid(which='major', axis='both', linestyle=':', color='black')
 
-    for i in range(len(map)):
-        for j in range(len(map)):
+    for i in range(len(board)):
+        for j in range(len(board)):
             if 18 == i and 1 == j:
                 ax.text(j, i, "S", ha="center", va="center", color="red", weight='bold')
 
@@ -167,81 +203,89 @@ def plotData(path):
     plt.show()
 
 
-
 def main():
-    global map
 
-    map = np.empty((N, N))
-    map[:] = 0
+    board = np.empty((N, N))
+    board[:] = 0
 
-    map[13, 0] = 1
-    map[13, 1] = 1
-    map[2, 2] = 1
-    map[8, 2] = 1
-    map[13, 2] = 1
-    map[2, 3] = 1
-    map[8, 3] = 1
-    map[13, 3] = 1
-    map[16, 3] = 1
-    map[17, 3] = 1
-    map[18, 3] = 1
-    map[19, 3] = 1
-    map[2, 4] = 1
-    map[8, 4] = 1
-    map[2, 5] = 1
-    map[4, 5] = 1
-    map[5, 5] = 1
-    map[8, 5] = 1
-    map[2, 6] = 1
-    map[8, 6] = 1
-    map[2, 7] = 1
-    map[8, 7] = 1
-    map[2, 8] = 1
-    map[8, 8] = 1
-    map[7, 9] = 1
-    map[8, 9] = 1
-    map[9, 9] = 1
-    map[10, 9] = 1
-    map[15, 9] = 1
-    map[15, 10] = 1
-    map[5, 11] = 1
-    map[15, 11] = 1
-    map[0, 12] = 1
-    map[1, 12] = 1
-    map[2, 12] = 1
-    map[3, 12] = 1
-    map[5, 12] = 1
-    map[8, 12] = 1
-    map[12, 12] = 1
-    map[13, 12] = 1
-    map[14, 12] = 1
-    map[15, 12] = 1
-    map[8, 13] = 1
-    map[8, 14] = 1
-    map[4, 15] = 1
-    map[6, 15] = 1
-    map[7, 15] = 1
-    map[8, 15] = 1
-    map[16, 15] = 1
-    map[17, 15] = 1
-    map[18, 15] = 1
-    map[19, 15] = 1
-    map[4, 16] = 1
-    map[8, 16] = 1
-    map[4, 17] = 1
-    map[8, 17] = 1
-    map[4, 18] = 1
-    map[5, 18] = 1
-    map[6, 18] = 1
-    map[8, 18] = 1
-    map[4, 19] = 1
+    board[13, 0] = 1
+    board[13, 1] = 1
+    board[2, 2] = 1
+    board[8, 2] = 1
+    board[13, 2] = 1
+    board[2, 3] = 1
+    board[8, 3] = 1
+    board[13, 3] = 1
+    board[16, 3] = 1
+    board[17, 3] = 1
+    board[18, 3] = 1
+    board[19, 3] = 1
+    board[2, 4] = 1
+    board[8, 4] = 1
+    board[2, 5] = 1
+    board[4, 5] = 1
+    board[5, 5] = 1
+    board[8, 5] = 1
+    board[2, 6] = 1
+    board[8, 6] = 1
+    board[2, 7] = 1
+    board[8, 7] = 1
+    board[2, 8] = 1
+    board[8, 8] = 1
+    board[7, 9] = 1
+    board[8, 9] = 1
+    board[9, 9] = 1
+    board[10, 9] = 1
+    board[15, 9] = 1
+    board[15, 10] = 1
+    board[5, 11] = 1
+    board[15, 11] = 1
+    board[0, 12] = 1
+    board[1, 12] = 1
+    board[2, 12] = 1
+    board[3, 12] = 1
+    board[5, 12] = 1
+    board[8, 12] = 1
+    board[12, 12] = 1
+    board[13, 12] = 1
+    board[14, 12] = 1
+    board[15, 12] = 1
+    board[8, 13] = 1
+    board[8, 14] = 1
+    board[4, 15] = 1
+    board[6, 15] = 1
+    board[7, 15] = 1
+    board[8, 15] = 1
+    board[16, 15] = 1
+    board[17, 15] = 1
+    board[18, 15] = 1
+    board[19, 15] = 1
+    board[4, 16] = 1
+    board[8, 16] = 1
+    board[4, 17] = 1
+    board[8, 17] = 1
+    board[4, 18] = 1
+    board[5, 18] = 1
+    board[6, 18] = 1
+    board[8, 18] = 1
+    board[4, 19] = 1
 
-    path = astar(map, (18, 1), (1, 18))
 
-    print(path)
 
-    plotData(path)
+    # # obstacles to complete block goal:
+    # board[4, 12] = 1
+    # board[4, 13] = 1
+    # board[4, 14] = 1
 
+    path, costs = calculatePath(board, (1, 18), (18, 1))
+
+    if path == -1 and costs == -1:
+        print("No path found")
+    else:
+        print("Found a path with costs of ", costs)
+        print("Path: ")
+        print(path)
+        plotData(board, path)
 
 
 if __name__ == "__main__":
